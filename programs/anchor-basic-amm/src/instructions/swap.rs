@@ -84,12 +84,19 @@ impl<'info> Swap<'info> {
             false => (self.pool_x_ata.amount, self.pool_x_ata.amount),
         };
 
+        self.deposit(x_to_y, amount_in)?;
+
+        let amount_in_minus_fees = amount_in
+            .checked_mul(100000_u64.checked_sub(self.config.fee as u64).unwrap())
+            .ok_or(AmmErrorCode::Overflow)?
+            .checked_div(100000_u64)
+            .ok_or(AmmErrorCode::Overflow)?;
+
         // dy = Y.dx / (X + dx)
-        let amount_out = calculate_desired_amount_withdraw(x, y, amount_in)?;
+        let amount_out = calculate_desired_amount_withdraw(x, y, amount_in_minus_fees)?;
 
         require_gte!(amount_out, min_amount_out, AmmErrorCode::InvalidParams);
 
-        self.deposit(x_to_y, amount_in)?;
         self.withdraw(x_to_y, amount_out)?;
 
         Ok(())
