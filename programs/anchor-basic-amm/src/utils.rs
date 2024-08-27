@@ -30,3 +30,42 @@ pub fn x2_from_y_swap_amount(x: u64, y: u64, a: u64) -> Result<u64> {
 pub fn y2_from_x_swap_amount(x: u64, y: u64, a: u64) -> Result<u64> {
     x2_from_y_swap_amount(y, x, a)
 }
+
+// Calculate the withdraw amount of X from swapping in Y
+// ΔX = X₁ - X₂
+pub fn delta_x_from_y_swap_amount(x: u64, y: u64, a: u64) -> Result<u64> {
+    Ok(x.checked_sub(x2_from_y_swap_amount(x, y, a)?)
+        .ok_or(AmmErrorCode::Overflow)?)
+}
+
+// Calculate difference in Y from swapping in X
+// ΔY = Y₁ - Y₂
+pub fn delta_y_from_x_swap_amount(x: u64, y: u64, a: u64) -> Result<u64> {
+    delta_x_from_y_swap_amount(y, x, a)
+}
+
+// Calculate the amount of X must deposit to get a of Y
+// dx = X. dy / Y
+pub fn calculate_desired_amount_deposit(x: u64, y: u64, a: u64) -> Result<u64> {
+    Ok(U256::from(x)
+        .checked_mul(U256::from(a))
+        .ok_or(AmmErrorCode::Overflow)?
+        .checked_div(U256::from(y))
+        .ok_or(AmmErrorCode::Overflow)?
+        .as_u64())
+}
+
+// Calculate the desired amount of Y to withdraw a of X
+// dy = Y.dx / (X + dx)
+pub fn calculate_desired_amount_withdraw(x: u64, y: u64, a: u64) -> Result<u64> {
+    Ok(U256::from(y)
+        .checked_mul(U256::from(a))
+        .ok_or(AmmErrorCode::Overflow)?
+        .checked_div(
+            U256::from(x)
+                .checked_add(U256::from(a))
+                .ok_or(AmmErrorCode::Overflow)?,
+        )
+        .ok_or(AmmErrorCode::Overflow)?
+        .as_u64())
+}

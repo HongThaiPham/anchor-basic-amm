@@ -4,9 +4,11 @@ use anchor_spl::{
     token::Token,
     token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
 };
-use spl_math::uint::U256;
 
-use crate::{error::AmmErrorCode, AmmConfig, Pool, CONFIG_SEED, POOL_SEED};
+use crate::{
+    error::AmmErrorCode, utils::calculate_desired_amount_withdraw, AmmConfig, Pool, CONFIG_SEED,
+    POOL_SEED,
+};
 
 #[derive(Accounts)]
 pub struct Swap<'info> {
@@ -83,16 +85,7 @@ impl<'info> Swap<'info> {
         };
 
         // dy = Y.dx / (X + dx)
-        let amount_out = U256::from(y)
-            .checked_mul(U256::from(amount_in))
-            .ok_or(AmmErrorCode::Overflow)?
-            .checked_div(
-                U256::from(x)
-                    .checked_add(U256::from(amount_in))
-                    .ok_or(AmmErrorCode::Overflow)?,
-            )
-            .ok_or(AmmErrorCode::Overflow)?
-            .as_u64();
+        let amount_out = calculate_desired_amount_withdraw(x, y, amount_in)?;
 
         require_gte!(amount_out, min_amount_out, AmmErrorCode::InvalidParams);
 

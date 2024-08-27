@@ -8,7 +8,7 @@ use anchor_spl::{
 };
 use spl_math::uint::U256;
 
-use crate::{error::AmmErrorCode, Pool, POOL_SEED};
+use crate::{error::AmmErrorCode, utils::calculate_desired_amount_deposit, Pool, POOL_SEED};
 
 #[derive(Accounts)]
 pub struct AddLiquidity<'info> {
@@ -114,6 +114,7 @@ impl<'info> AddLiquidity<'info> {
                     .as_u64()
             }
             false => {
+                // s = dx.T / X = dy.T / Y (T is current supply of LP token)
                 let pool_balance_x = self.pool_x_ata.amount;
                 U256::from(amount_x)
                     .checked_mul(U256::from(lp_supply))
@@ -154,33 +155,30 @@ impl<'info> AddLiquidity<'info> {
         let lp_supply = self.mint_lp.supply;
 
         // if pool have no liquidity, just init with user's input
-        let (amount_x, amount_y) =
-            match lp_supply.eq(&0) && pool_balance_x.eq(&0) && pool_balance_y.eq(&0) {
-                true => (max_amount_x, max_amount_y),
-                false => {
-                    // dx = X. dy / Y
-                    let dx = U256::from(pool_balance_x)
-                        .checked_mul(U256::from(max_amount_y))
-                        .ok_or(AmmErrorCode::Overflow)?
-                        .checked_div(U256::from(pool_balance_y))
-                        .ok_or(AmmErrorCode::Overflow)?
-                        .as_u64();
+        let (amount_x, amount_y) = match lp_supply.eq(&0)
+            && pool_balance_x.eq(&0)
+            && pool_balance_y.eq(&0)
+        {
+            true => (max_amount_x, max_amount_y),
+            false => {
+                // dx = X. dy / Y
+                let dx =
+                    calculate_desired_amount_deposit(pool_balance_x, pool_balance_y, max_amount_y)?;
 
-                    if dx.ge(&max_amount_x) {
-                        (dx, max_amount_y)
-                    } else {
-                        // dy = Y. dx / X
-                        let dy = U256::from(pool_balance_y)
-                            .checked_mul(U256::from(max_amount_x))
-                            .ok_or(AmmErrorCode::Overflow)?
-                            .checked_div(U256::from(pool_balance_x))
-                            .ok_or(AmmErrorCode::Overflow)?
-                            .as_u64();
+                if dx.ge(&max_amount_x) {
+                    (dx, max_amount_y)
+                } else {
+                    // dy = Y. dx / X
+                    let dy = calculate_desired_amount_deposit(
+                        pool_balance_y,
+                        pool_balance_x,
+                        max_amount_x,
+                    )?;
 
-                        (max_amount_x, dy)
-                    }
+                    (max_amount_x, dy)
                 }
-            };
+            }
+        };
 
         transfer_checked(
             CpiContext::new(
