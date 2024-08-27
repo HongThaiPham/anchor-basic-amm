@@ -8,4 +8,5 @@ pub enum AmmErrorCode {
     InsufficientBalance,
     Overflow,
     InvalidParams,
+    ZeroAmount,
 }

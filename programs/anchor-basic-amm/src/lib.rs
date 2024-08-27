@@ -37,4 +37,8 @@ pub mod anchor_basic_amm {
         ctx.accounts
             .handler(x_to_y, amount_in, minimum_amount_out, &ctx.bumps)
     }
+
+    pub fn remove_liquidity(ctx: Context<RemoveLiquidity>, shares: u64) -> Result<()> {
+        ctx.accounts.handler(shares)
+    }
 }

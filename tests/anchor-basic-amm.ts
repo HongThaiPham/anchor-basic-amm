@@ -3,6 +3,8 @@ import { Program, web3 } from "@coral-xyz/anchor";
 import { AnchorBasicAmm } from "../target/types/anchor_basic_amm";
 import {
   createMint,
+  getAccount,
+  getAssociatedTokenAddressSync,
   getOrCreateAssociatedTokenAccount,
   mintTo,
   TOKEN_2022_PROGRAM_ID,
@@ -311,20 +313,20 @@ describe("anchor-basic-amm", () => {
 
     console.log("Transaction executed. ", tx);
 
-    // const tx2 = await program.methods
-    //   .addLiquidity(amount_y_deposit, amount_x_deposit)
-    //   .accounts({
-    //     mintLp,
-    //     mintX: mintX.publicKey,
-    //     mintXTokenProgram: TOKEN_2022_PROGRAM_ID,
-    //     mintY: mintY.publicKey,
-    //     mintYTokenProgram: TOKEN_2022_PROGRAM_ID,
-    //     signer: user2.publicKey,
-    //   })
-    //   .signers([user2])
-    //   .rpc();
+    const tx2 = await program.methods
+      .addLiquidity(amount_y_deposit, amount_x_deposit)
+      .accounts({
+        mintLp,
+        mintX: mintX.publicKey,
+        mintXTokenProgram: TOKEN_2022_PROGRAM_ID,
+        mintY: mintY.publicKey,
+        mintYTokenProgram: TOKEN_2022_PROGRAM_ID,
+        signer: user2.publicKey,
+      })
+      .signers([user2])
+      .rpc();
 
-    // console.log("Transaction executed. ", tx2);
+    console.log("Transaction executed. ", tx2);
   });
 
   it("Should swap susccessfully", async () => {
@@ -340,6 +342,28 @@ describe("anchor-basic-amm", () => {
         signer: user2.publicKey,
       })
       .signers([user2])
+      .rpc();
+
+    console.log("Transaction executed. ", tx);
+  });
+
+  it("Should remove liquidity susccessfully", async () => {
+    const user1_lp_ata = getAssociatedTokenAddressSync(mintLp, user1.publicKey);
+    const user1_lp_ata_account = await getAccount(
+      provider.connection,
+      user1_lp_ata
+    );
+    const tx = await program.methods
+      .removeLiquidity(new anchor.BN(user1_lp_ata_account.amount.toString()))
+      .accounts({
+        mintLp,
+        mintX: mintX.publicKey,
+        mintXTokenProgram: TOKEN_2022_PROGRAM_ID,
+        mintY: mintY.publicKey,
+        mintYTokenProgram: TOKEN_2022_PROGRAM_ID,
+        signer: user1.publicKey,
+      })
+      .signers([user1])
       .rpc();
 
     console.log("Transaction executed. ", tx);
