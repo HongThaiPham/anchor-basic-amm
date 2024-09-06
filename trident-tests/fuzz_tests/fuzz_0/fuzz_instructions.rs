@@ -7,8 +7,8 @@ pub mod anchor_basic_amm_fuzz_instructions {
         Initialize(Initialize),
         CreatePool(CreatePool),
         AddLiquidity(AddLiquidity),
-        // Swap(Swap),
-        // RemoveLiquidity(RemoveLiquidity),
+        Swap(Swap),
+        RemoveLiquidity(RemoveLiquidity),
     }
     #[derive(Arbitrary, Debug)]
     pub struct Initialize {
@@ -446,9 +446,9 @@ pub mod anchor_basic_amm_fuzz_instructions {
 
         fn check(
             &self,
-            pre_ix: Self::IxSnapshot,
+            _pre_ix: Self::IxSnapshot,
             post_ix: Self::IxSnapshot,
-            ix_data: Self::IxData,
+            _ix_data: Self::IxData,
         ) -> Result<(), FuzzingError> {
             if post_ix.pool_x_ata.amount.gt(&0) {
                 return Err(FuzzingError::Custom(3));
@@ -456,87 +456,344 @@ pub mod anchor_basic_amm_fuzz_instructions {
             Ok(())
         }
     }
-    // impl<'info> IxOps<'info> for Swap {
-    //     type IxData = anchor_basic_amm::instruction::Swap;
-    //     type IxAccounts = FuzzAccounts;
-    //     type IxSnapshot = SwapSnapshot<'info>;
-    //     fn get_data(
-    //         &self,
-    //         _client: &mut impl FuzzClient,
-    //         _fuzz_accounts: &mut FuzzAccounts,
-    //     ) -> Result<Self::IxData, FuzzingError> {
-    //         let data = anchor_basic_amm::instruction::Swap {
-    //             x_to_y: todo!(),
-    //             amount_in: todo!(),
-    //             minimum_amount_out: todo!(),
-    //         };
-    //         Ok(data)
-    //     }
-    //     fn get_accounts(
-    //         &self,
-    //         client: &mut impl FuzzClient,
-    //         fuzz_accounts: &mut FuzzAccounts,
-    //     ) -> Result<(Vec<Keypair>, Vec<AccountMeta>), FuzzingError> {
-    //         let signers = vec![todo!()];
-    //         let acc_meta = anchor_basic_amm::accounts::Swap {
-    //             signer: todo!(),
-    //             pool: todo!(),
-    //             config: todo!(),
-    //             mint_x: todo!(),
-    //             mint_y: todo!(),
-    //             user_x_ata: todo!(),
-    //             user_y_ata: todo!(),
-    //             pool_x_ata: todo!(),
-    //             pool_y_ata: todo!(),
-    //             mint_x_token_program: todo!(),
-    //             mint_y_token_program: todo!(),
-    //             token_program: todo!(),
-    //             associated_token_program: todo!(),
-    //             system_program: todo!(),
-    //         }
-    //         .to_account_metas(None);
-    //         Ok((signers, acc_meta))
-    //     }
-    // }
-    // impl<'info> IxOps<'info> for RemoveLiquidity {
-    //     type IxData = anchor_basic_amm::instruction::RemoveLiquidity;
-    //     type IxAccounts = FuzzAccounts;
-    //     type IxSnapshot = RemoveLiquiditySnapshot<'info>;
-    //     fn get_data(
-    //         &self,
-    //         _client: &mut impl FuzzClient,
-    //         _fuzz_accounts: &mut FuzzAccounts,
-    //     ) -> Result<Self::IxData, FuzzingError> {
-    //         let data = anchor_basic_amm::instruction::RemoveLiquidity { shares: todo!() };
-    //         Ok(data)
-    //     }
-    //     fn get_accounts(
-    //         &self,
-    //         client: &mut impl FuzzClient,
-    //         fuzz_accounts: &mut FuzzAccounts,
-    //     ) -> Result<(Vec<Keypair>, Vec<AccountMeta>), FuzzingError> {
-    //         let signers = vec![todo!()];
-    //         let acc_meta = anchor_basic_amm::accounts::RemoveLiquidity {
-    //             signer: todo!(),
-    //             pool: todo!(),
-    //             mint_x: todo!(),
-    //             mint_y: todo!(),
-    //             mint_lp: todo!(),
-    //             user_x_ata: todo!(),
-    //             user_y_ata: todo!(),
-    //             pool_x_ata: todo!(),
-    //             pool_y_ata: todo!(),
-    //             user_lp_ata: todo!(),
-    //             mint_x_token_program: todo!(),
-    //             mint_y_token_program: todo!(),
-    //             token_program: todo!(),
-    //             associated_token_program: todo!(),
-    //             system_program: todo!(),
-    //         }
-    //         .to_account_metas(None);
-    //         Ok((signers, acc_meta))
-    //     }
-    // }
+    impl<'info> IxOps<'info> for Swap {
+        type IxData = anchor_basic_amm::instruction::Swap;
+        type IxAccounts = FuzzAccounts;
+        type IxSnapshot = SwapSnapshot<'info>;
+        fn get_data(
+            &self,
+            _client: &mut impl FuzzClient,
+            _fuzz_accounts: &mut FuzzAccounts,
+        ) -> Result<Self::IxData, FuzzingError> {
+            let data = anchor_basic_amm::instruction::Swap {
+                x_to_y: self.data.x_to_y,
+                amount_in: self.data.amount_in,
+                minimum_amount_out: self.data.minimum_amount_out,
+            };
+            Ok(data)
+        }
+        fn get_accounts(
+            &self,
+            client: &mut impl FuzzClient,
+            fuzz_accounts: &mut FuzzAccounts,
+        ) -> Result<(Vec<Keypair>, Vec<AccountMeta>), FuzzingError> {
+            let signer = fuzz_accounts.maker.get_or_create_account(
+                self.accounts.signer,
+                client,
+                10 * LAMPORTS_PER_SOL,
+            );
+            let signers = vec![signer.clone()];
+            let mint_x = fuzz_accounts
+                .mint_x
+                .get_or_create_account(self.accounts.mint_x, client, 9, &signer.pubkey(), None)
+                .unwrap();
+
+            let mint_y = fuzz_accounts
+                .mint_y
+                .get_or_create_account(self.accounts.mint_y, client, 9, &signer.pubkey(), None)
+                .unwrap();
+
+            let pool = fuzz_accounts
+                .pool
+                .get_or_create_account(
+                    self.accounts.pool,
+                    &[b"pool", mint_x.as_ref(), mint_y.as_ref()],
+                    &anchor_basic_amm::ID,
+                )
+                .ok_or(FuzzingError::Custom(3))?
+                .pubkey();
+
+            let pool_x_ata = fuzz_accounts
+                .pool_x_ata
+                .get_or_create_account(
+                    self.accounts.pool_x_ata,
+                    client,
+                    mint_x,
+                    signer.pubkey(),
+                    10 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let pool_y_ata = fuzz_accounts
+                .pool_y_ata
+                .get_or_create_account(
+                    self.accounts.pool_y_ata,
+                    client,
+                    mint_y,
+                    signer.pubkey(),
+                    10 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let user_x_ata = fuzz_accounts
+                .user_x_ata
+                .get_or_create_account(
+                    self.accounts.user_x_ata,
+                    client,
+                    mint_x,
+                    signer.pubkey(),
+                    1000000 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let user_y_ata = fuzz_accounts
+                .user_y_ata
+                .get_or_create_account(
+                    self.accounts.user_y_ata,
+                    client,
+                    mint_y,
+                    signer.pubkey(),
+                    1000000 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+            let config = fuzz_accounts
+                .config
+                .get_or_create_account(self.accounts.config, &[b"config"], &anchor_basic_amm::ID)
+                .ok_or(FuzzingError::Custom(3))?
+                .pubkey();
+            let acc_meta = anchor_basic_amm::accounts::Swap {
+                signer: signer.pubkey(),
+                pool,
+                config,
+                mint_x,
+                mint_y,
+                user_x_ata,
+                user_y_ata,
+                pool_x_ata,
+                pool_y_ata,
+                mint_x_token_program: anchor_spl::token_2022::ID,
+                mint_y_token_program: anchor_spl::token_2022::ID,
+                token_program: anchor_spl::token::ID,
+                associated_token_program: anchor_spl::associated_token::ID,
+                system_program: solana_sdk::system_program::ID,
+            }
+            .to_account_metas(None);
+            Ok((signers, acc_meta))
+        }
+
+        fn check(
+            &self,
+            pre_ix: Self::IxSnapshot,
+            post_ix: Self::IxSnapshot,
+            ix_data: Self::IxData,
+        ) -> Result<(), FuzzingError> {
+            if ix_data.x_to_y {
+                if post_ix.pool_x_ata.amount.gt(&pre_ix.pool_x_ata.amount)
+                    && post_ix.pool_y_ata.amount.lt(&pre_ix.pool_y_ata.amount)
+                {
+                    return Err(FuzzingError::Custom(3));
+                }
+
+                if post_ix
+                    .user_x_ata
+                    .unwrap()
+                    .amount
+                    .lt(&pre_ix.user_x_ata.unwrap().amount)
+                    && post_ix
+                        .user_y_ata
+                        .unwrap()
+                        .amount
+                        .gt(&pre_ix.user_y_ata.unwrap().amount)
+                {
+                    return Err(FuzzingError::Custom(4));
+                }
+            } else {
+                if post_ix.pool_y_ata.amount.gt(&pre_ix.pool_y_ata.amount)
+                    && post_ix.pool_x_ata.amount.lt(&pre_ix.pool_x_ata.amount)
+                {
+                    return Err(FuzzingError::Custom(3));
+                }
+
+                if post_ix
+                    .user_y_ata
+                    .unwrap()
+                    .amount
+                    .lt(&pre_ix.user_y_ata.unwrap().amount)
+                    && post_ix
+                        .user_x_ata
+                        .unwrap()
+                        .amount
+                        .gt(&pre_ix.user_x_ata.unwrap().amount)
+                {
+                    return Err(FuzzingError::Custom(4));
+                }
+            }
+
+            Ok(())
+        }
+    }
+    impl<'info> IxOps<'info> for RemoveLiquidity {
+        type IxData = anchor_basic_amm::instruction::RemoveLiquidity;
+        type IxAccounts = FuzzAccounts;
+        type IxSnapshot = RemoveLiquiditySnapshot<'info>;
+        fn get_data(
+            &self,
+            _client: &mut impl FuzzClient,
+            _fuzz_accounts: &mut FuzzAccounts,
+        ) -> Result<Self::IxData, FuzzingError> {
+            let data = anchor_basic_amm::instruction::RemoveLiquidity {
+                shares: self.data.shares,
+            };
+            Ok(data)
+        }
+        fn get_accounts(
+            &self,
+            client: &mut impl FuzzClient,
+            fuzz_accounts: &mut FuzzAccounts,
+        ) -> Result<(Vec<Keypair>, Vec<AccountMeta>), FuzzingError> {
+            let signer = fuzz_accounts.maker.get_or_create_account(
+                self.accounts.signer,
+                client,
+                10 * LAMPORTS_PER_SOL,
+            );
+
+            let signers = vec![signer.clone()];
+            let mint_x = fuzz_accounts
+                .mint_x
+                .get_or_create_account(self.accounts.mint_x, client, 9, &signer.pubkey(), None)
+                .unwrap();
+
+            let mint_y = fuzz_accounts
+                .mint_y
+                .get_or_create_account(self.accounts.mint_y, client, 9, &signer.pubkey(), None)
+                .unwrap();
+
+            let pool = fuzz_accounts
+                .pool
+                .get_or_create_account(
+                    self.accounts.pool,
+                    &[b"pool", mint_x.as_ref(), mint_y.as_ref()],
+                    &anchor_basic_amm::ID,
+                )
+                .ok_or(FuzzingError::Custom(3))?
+                .pubkey();
+
+            let mint_lp = fuzz_accounts
+                .mint_lp
+                .get_or_create_account(
+                    self.accounts.mint_lp,
+                    &[b"lp", pool.as_ref()],
+                    &anchor_basic_amm::ID,
+                )
+                .unwrap()
+                .pubkey();
+
+            // let mint_lp = fuzz_accounts
+            //     .mint_lp
+            //     .get_or_create_account(self.accounts.mint_lp, client, 6, &pool, None)
+            //     .unwrap();
+
+            let pool_x_ata = fuzz_accounts
+                .pool_x_ata
+                .get_or_create_account(
+                    self.accounts.pool_x_ata,
+                    client,
+                    mint_x,
+                    signer.pubkey(),
+                    10 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let pool_y_ata = fuzz_accounts
+                .pool_y_ata
+                .get_or_create_account(
+                    self.accounts.pool_y_ata,
+                    client,
+                    mint_y,
+                    signer.pubkey(),
+                    10 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let user_x_ata = fuzz_accounts
+                .user_x_ata
+                .get_or_create_account(
+                    self.accounts.user_x_ata,
+                    client,
+                    mint_x,
+                    signer.pubkey(),
+                    1000000 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let user_y_ata = fuzz_accounts
+                .user_y_ata
+                .get_or_create_account(
+                    self.accounts.user_y_ata,
+                    client,
+                    mint_y,
+                    signer.pubkey(),
+                    1000000 * LAMPORTS_PER_SOL,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+
+            let user_lp_ata = fuzz_accounts
+                .user_lp_ata
+                .get_or_create_account(
+                    self.accounts.user_lp_ata,
+                    client,
+                    mint_lp,
+                    signer.pubkey(),
+                    0,
+                    None,
+                    None,
+                    0,
+                    None,
+                )
+                .unwrap();
+            let acc_meta = anchor_basic_amm::accounts::RemoveLiquidity {
+                signer: signer.pubkey(),
+                pool,
+                mint_x,
+                mint_y,
+                mint_lp,
+                user_x_ata,
+                user_y_ata,
+                pool_x_ata,
+                pool_y_ata,
+                user_lp_ata,
+                mint_x_token_program: anchor_spl::token_2022::ID,
+                mint_y_token_program: anchor_spl::token_2022::ID,
+                token_program: anchor_spl::token::ID,
+                associated_token_program: anchor_spl::associated_token::ID,
+                system_program: solana_sdk::system_program::ID,
+            }
+            .to_account_metas(None);
+            Ok((signers, acc_meta))
+        }
+    }
     #[doc = r" Use AccountsStorage<T> where T can be one of:"]
     #[doc = r" Keypair, PdaStore, TokenStore, MintStore, ProgramStore"]
     #[derive(Default)]
