@@ -23,6 +23,7 @@ pub mod anchor_basic_amm_fuzz_instructions {
     }
     #[derive(Arbitrary, Debug)]
     pub struct InitializeData {
+        #[arbitrary(with = |u: &mut arbitrary::Unstructured| u.int_in_range(10..=10000))]
         pub fee: u16,
     }
     #[derive(Arbitrary, Debug)]
@@ -154,7 +155,7 @@ pub mod anchor_basic_amm_fuzz_instructions {
             );
             let config = fuzz_accounts
                 .config
-                .get_or_create_account(self.accounts.config, &[b"config"], &anchor_basic_amm::ID)
+                .get_or_create_account(self.accounts.config, &[b"ammconfig"], &anchor_basic_amm::ID)
                 .ok_or(FuzzingError::Custom(3))?
                 .pubkey();
             let signers = vec![signer.clone()];
@@ -564,7 +565,7 @@ pub mod anchor_basic_amm_fuzz_instructions {
                 .unwrap();
             let config = fuzz_accounts
                 .config
-                .get_or_create_account(self.accounts.config, &[b"config"], &anchor_basic_amm::ID)
+                .get_or_create_account(self.accounts.config, &[b"ammconfig"], &anchor_basic_amm::ID)
                 .ok_or(FuzzingError::Custom(3))?
                 .pubkey();
             let acc_meta = anchor_basic_amm::accounts::Swap {
